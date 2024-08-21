@@ -2,13 +2,13 @@ import os
 import uuid
 import time
 from datetime import datetime
-import requests
+from bson.objectid import ObjectId
 
+import requests
 from niconico import NicoNico
 from niconico.exceptions import CommentAPIError
 from pymongo import MongoClient
 from redis.client import Redis
-from bson.objectid import ObjectId
 
 MONGO_URL = os.environ.get('MONGO_URL')
 REDIS_URL = os.environ.get('REDIS_URL')
@@ -40,7 +40,7 @@ niconico_client.login_with_mail(NICONICO_MAIL, NICONICO_PASSWORD)
 
 redis_client = Redis.from_url(REDIS_URL)
 
-mongo_client = MongoClient(MONGO_URL)
+mongo_client: MongoClient = MongoClient(MONGO_URL)
 mongo_db = mongo_client.get_database("nicoarch")
 mongo_tasks = mongo_db.get_collection("tasks")
 mongo_videos = mongo_db.get_collection("videos")
