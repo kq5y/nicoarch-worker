@@ -2,13 +2,15 @@ import os
 import uuid
 import time
 from datetime import datetime
-from bson.objectid import ObjectId
 
 import requests
+from bson import ObjectId
+
 from niconico import NicoNico
 from niconico.exceptions import CommentAPIError
-from pymongo import MongoClient
-from redis.client import Redis
+
+from connectors.mongo import MongoConnector
+from connectors.redis import RedisConnector
 
 MONGO_URL = os.environ.get('MONGO_URL')
 REDIS_URL = os.environ.get('REDIS_URL')
@@ -38,21 +40,12 @@ if os.path.exists("/contents/video") is False:
 niconico_client = NicoNico()
 niconico_client.login_with_mail(NICONICO_MAIL, NICONICO_PASSWORD)
 
-redis_client = Redis.from_url(REDIS_URL)
+mongo_connector = MongoConnector(MONGO_URL)
+redis_connector = RedisConnector(REDIS_URL)
 
-mongo_client: MongoClient = MongoClient(MONGO_URL)
-mongo_db = mongo_client.get_database("nicoarch")
-mongo_tasks = mongo_db.get_collection("tasks")
-mongo_videos = mongo_db.get_collection("videos")
-mongo_users = mongo_db.get_collection("users")
-mongo_comments = mongo_db.get_collection("comments")
 
 def fetch(task_id):
-    task = mongo_tasks.find_one_and_update({
-        "_id": ObjectId(task_id)
-    }, {"$set": {
-        "status": "fetching"
-    }})
+    task = mongo_connector.update_task_status(task_id, "fetching")
     watchId = task.get("watchId")
     watchUUID = uuid.uuid3(uuid.NAMESPACE_URL, watchId)
     videoData = niconico_client.video.get_video(watchId)
@@ -63,7 +56,7 @@ def fetch(task_id):
     ownerId = None
     if userData is not None:
         userUUID = uuid.uuid3(uuid.NAMESPACE_URL, str(userData.id_))
-        user_res = mongo_users.insert_one({
+        user_res = mongo_connector.insert_user({
             "userId": userData.id_,
             "nickname": userData.nickname,
             "description": userData.description,
@@ -74,7 +67,7 @@ def fetch(task_id):
             b = requests.get(userData.icons.large)
             f.write(b.content)
         ownerId = user_res.inserted_id
-    video = mongo_videos.insert_one({
+    video = mongo_connector.insert_video({
         "title": watchData.video.title,
         "watchId": watchId,
         "registeredAt": watchData.video.registered_at,
@@ -94,12 +87,7 @@ def fetch(task_id):
     return watchData, watchUUID, video.inserted_id
 
 def download(task_id, watchData, watchUUID, videoId):
-    mongo_tasks.update_one({
-        "_id": ObjectId(task_id)
-    }, {"$set": {
-        "status": "downloading",
-        "videoId": videoId
-    }})
+    mongo_connector.update_task_status(task_id, "downloading", {"videoId": videoId})
     with open(f'/contents/image/thumbnail/{str(watchUUID)}.jpg', 'wb') as f:
         b = requests.get(watchData.video.thumbnail.ogp)
         f.write(b.content)
@@ -110,7 +98,7 @@ def download(task_id, watchData, watchUUID, videoId):
 def insert_comments(comments, videoId, threadId, threadFork):
     if len(comments) <= 0:
         return
-    mongo_comments.insert_many([{
+    mongo_connector.insert_comments([{
         "commentId": comment.id_,
         "body": comment.body,
         "commands": comment.commands,
@@ -128,11 +116,7 @@ def insert_comments(comments, videoId, threadId, threadFork):
     } for comment in comments])
 
 def getting_comments(task_id, watchData, videoId):
-    mongo_tasks.update_one({
-        "_id": ObjectId(task_id)
-    }, {"$set": {
-        "status": "comment"
-    }})
+    mongo_connector.update_task_status(task_id, "comment")
     when_unix = int(time.time())
     main_min_no = 0
     easy_min_no = 0
@@ -193,37 +177,22 @@ def getting_comments(task_id, watchData, videoId):
                 insert_comments(comments, videoId, thread.id_, thread.fork)
                 main_min_no = thread.comments[0].no
                 when_unix = int(datetime.fromisoformat(thread.comments[0].posted_at).timestamp())
-        mongo_tasks.update_one({
-            "_id": ObjectId(task_id)
-        }, {"$set": {
-            "commentCount": comment_count
-        }})
+        mongo_connector.update_task_status(task_id, "comment", {"commentCount": comment_count})
         time.sleep(1)
     return comment_count
 
 
 def finish(task_id):
-    mongo_tasks.update_one({
-        "_id": ObjectId(task_id)
-    }, {"$set": {
-        "status": "completed"
-    }})
+    mongo_connector.update_task_status(task_id, "completed")
 
 def error(task_id, e):
-    mongo_tasks.update_one({
-        "_id": ObjectId(task_id)
-    }, {"$set": {
-        "status": "failed",
-        "error": str(e)
-    }})
-    mongo_videos.delete_one({
-        "taskId": ObjectId(task_id)
-    })
+    mongo_connector.update_task_status(task_id, "failed", {"error": str(e)})
+    mongo_connector.delete_video(task_id)
 
 def main():
     print("nicoarch worker started")
     while True:
-        task = redis_client.lpop("tasks")
+        task = redis_connector.pop_tasks()
         if task is None:
             time.sleep(10)
             continue
