@@ -12,10 +12,12 @@ from niconico.exceptions import CommentAPIError
 from connectors.mongo import MongoConnector
 from connectors.redis import RedisConnector
 
+
 MONGO_URL = os.environ.get('MONGO_URL')
 REDIS_URL = os.environ.get('REDIS_URL')
 NICONICO_MAIL = os.environ.get('NICONICO_MAIL')
 NICONICO_PASSWORD = os.environ.get('NICONICO_PASSWORD')
+
 
 if not MONGO_URL:
     raise ValueError('MONGO_URL is not set')
@@ -25,6 +27,7 @@ if not NICONICO_MAIL:
     raise ValueError('NICONICO_MAIL is not set')
 if not NICONICO_PASSWORD:
     raise ValueError('NICONICO_PASSWORD is not set')
+
 
 if os.path.exists("/contents") is False:
     os.makedirs("/contents")
@@ -37,6 +40,7 @@ if os.path.exists("/contents/image/thumbnail") is False:
 if os.path.exists("/contents/video") is False:
     os.makedirs("/contents/video")
 
+
 niconico_client = NicoNico()
 niconico_client.login_with_mail(NICONICO_MAIL, NICONICO_PASSWORD)
 
@@ -44,58 +48,93 @@ mongo_connector = MongoConnector(MONGO_URL)
 redis_connector = RedisConnector(REDIS_URL)
 
 
-def fetch(task_id):
-    task = mongo_connector.update_task_status(task_id, "fetching")
-    watchId = task.get("watchId")
-    watchUUID = uuid.uuid3(uuid.NAMESPACE_URL, watchId)
-    videoData = niconico_client.video.get_video(watchId)
-    if videoData is None:
+def save_video_data(task_id, watch_id):
+    mongo_connector.update_task_status(task_id, "fetching")
+    watch_uuid = uuid.uuid3(uuid.NAMESPACE_URL, watch_id)
+    video_data = niconico_client.video.get_video(watch_id)
+    if video_data is None:
         raise ValueError("Video not found")
-    watchData = niconico_client.video.watch.get_watch_data(watchId)
-    userData = niconico_client.user.get_user(str(watchData.owner.id_))
-    ownerId = None
-    if userData is not None:
-        userUUID = uuid.uuid3(uuid.NAMESPACE_URL, str(userData.id_))
+    watch_data = niconico_client.video.watch.get_watch_data(watch_id)
+    user_data = niconico_client.user.get_user(str(watch_data.owner.id_))
+    owner_id = None
+    if user_data is not None:
+        user_uuid = uuid.uuid3(uuid.NAMESPACE_URL, str(user_data.id_))
         user_res = mongo_connector.insert_user({
-            "userId": userData.id_,
-            "nickname": userData.nickname,
-            "description": userData.description,
-            "registeredVersion": userData.registered_version,
-            "contentId": str(userUUID)
+            "userId": user_data.id_,
+            "nickname": user_data.nickname,
+            "description": user_data.description,
+            "registeredVersion": user_data.registered_version,
+            "contentId": str(user_uuid)
         })
-        with open(f'/contents/image/icon/{str(userUUID)}.jpg', 'wb') as f:
-            b = requests.get(userData.icons.large)
+        with open(f'/contents/image/icon/{str(user_uuid)}.jpg', 'wb') as f:
+            b = requests.get(user_data.icons.large)
             f.write(b.content)
-        ownerId = user_res.inserted_id
-    video = mongo_connector.insert_video({
-        "title": watchData.video.title,
-        "watchId": watchId,
-        "registeredAt": watchData.video.registered_at,
+        owner_id = user_res.inserted_id
+    mongo_connector.insert_video({
+        "title": watch_data.video.title,
+        "watchId": watch_id,
+        "registeredAt": watch_data.video.registered_at,
         "count": {
-            "view": watchData.video.count.view,
-            "comment": watchData.video.count.comment,
-            "mylist": watchData.video.count.mylist,
-            "like": watchData.video.count.like
+            "view": watch_data.video.count.view,
+            "comment": watch_data.video.count.comment,
+            "mylist": watch_data.video.count.mylist,
+            "like": watch_data.video.count.like
         },
-        "ownerId": ownerId,
-        "duration": watchData.video.duration,
-        "description": watchData.video.description,
-        "shortDescription": videoData.short_description,
+        "ownerId": owner_id,
+        "duration": watch_data.video.duration,
+        "description": watch_data.video.description,
+        "shortDescription": video_data.short_description,
         "taskId": ObjectId(task_id),
-        "contentId": str(watchUUID)
+        "contentId": str(watch_uuid)
     })
-    return watchData, watchUUID, video.inserted_id
+    return watch_data, watch_uuid
 
-def download(task_id, watchData, watchUUID, videoId):
-    mongo_connector.update_task_status(task_id, "downloading", {"videoId": videoId})
-    with open(f'/contents/image/thumbnail/{str(watchUUID)}.jpg', 'wb') as f:
-        b = requests.get(watchData.video.thumbnail.ogp)
+
+def update_video_data(task_id, watch_id):
+    mongo_connector.update_task_status(task_id, "fetching")
+    video_data = niconico_client.video.get_video(watch_id)
+    if video_data is None:
+        raise ValueError("Video not found")
+    watch_data = niconico_client.video.watch.get_watch_data(watch_id)
+    user_data = niconico_client.user.get_user(str(watch_data.owner.id_))
+    if user_data is not None:
+        user_uuid = uuid.uuid3(uuid.NAMESPACE_URL, str(user_data.id_))
+        mongo_connector.update_user(user_data.id_, {
+            "nickname": user_data.nickname,
+            "description": user_data.description,
+            "registeredVersion": user_data.registered_version
+        })
+        with open(f'/contents/image/icon/{str(user_uuid)}.jpg', 'wb') as f:
+            b = requests.get(user_data.icons.large)
+            f.write(b.content)
+    mongo_connector.update_video(watch_id, {
+        "title": watch_data.video.title,
+        "registeredAt": watch_data.video.registered_at,
+        "count": {
+            "view": watch_data.video.count.view,
+            "comment": watch_data.video.count.comment,
+            "mylist": watch_data.video.count.mylist,
+            "like": watch_data.video.count.like
+        },
+        "duration": watch_data.video.duration,
+        "description": watch_data.video.description,
+        "shortDescription": video_data.short_description,
+        "taskId": ObjectId(task_id)
+    })
+    return watch_data
+
+
+def download_video(task_id, watch_data, watch_uuid, video_id):
+    mongo_connector.update_task_status(task_id, "downloading", {"videoId": video_id})
+    with open(f'/contents/image/thumbnail/{str(watch_uuid)}.jpg', 'wb') as f:
+        b = requests.get(watch_data.video.thumbnail.ogp)
         f.write(b.content)
-    outputs = niconico_client.video.watch.get_outputs(watchData)
+    outputs = niconico_client.video.watch.get_outputs(watch_data)
     best_output = next(iter(outputs))
-    niconico_client.video.watch.download_video(watchData, best_output, "/contents/video/"+str(watchUUID)+".%(ext)s")
+    niconico_client.video.watch.download_video(watch_data, best_output, "/contents/video/"+str(watch_uuid)+".%(ext)s")
 
-def insert_comments(comments, videoId, threadId, threadFork):
+
+def insert_comments(comments, video_id, thread_id, thread_fork):
     if len(comments) <= 0:
         return
     mongo_connector.insert_comments([{
@@ -110,12 +149,13 @@ def insert_comments(comments, videoId, threadId, threadFork):
         "source": comment.source,
         "userId": comment.user_id,
         "vposMs": comment.vpos_ms,
-        "videoId": videoId,
-        "threadId": threadId,
-        "fork": threadFork,
+        "videoId": video_id,
+        "threadId": thread_id,
+        "fork": thread_fork,
     } for comment in comments])
 
-def getting_comments(task_id, watchData, videoId):
+
+def get_comments(task_id, watch_data, video_id):
     mongo_connector.update_task_status(task_id, "comment")
     when_unix = int(time.time())
     main_min_no = 0
@@ -128,10 +168,10 @@ def getting_comments(task_id, watchData, videoId):
     while not is_finished:
         comment_res = None
         try:
-            comment_res = niconico_client.video.watch.get_comments(watchData, when=when_unix, thread_key=thread_key)
+            comment_res = niconico_client.video.watch.get_comments(watch_data, when=when_unix, thread_key=thread_key)
         except CommentAPIError as e:
             if e.message == "EXPIRED_TOKEN":
-                thread_key = niconico_client.video.watch.get_thread_key(videoId)
+                thread_key = niconico_client.video.watch.get_thread_key(video_id)
                 time.sleep(1)
                 continue
         if comment_res is None:
@@ -146,7 +186,7 @@ def getting_comments(task_id, watchData, videoId):
                     continue
                 owner_comments_fecthed = True
                 comment_count += len(thread.comments)
-                insert_comments(thread.comments, videoId, thread.id_, thread.fork)
+                insert_comments(thread.comments, video_id, thread.id_, thread.fork)
             elif thread.fork == "easy":
                 if easy_min_no == 0:
                     easy_min_no = thread.comments[-1].no + 1
@@ -159,7 +199,7 @@ def getting_comments(task_id, watchData, videoId):
                 if len(comments) <= 0:
                     continue
                 comment_count += len(comments)
-                insert_comments(comments, videoId, thread.id_, thread.fork)
+                insert_comments(comments, video_id, thread.id_, thread.fork)
                 easy_min_no = thread.comments[0].no
             else:
                 if main_min_no == 0:
@@ -174,7 +214,89 @@ def getting_comments(task_id, watchData, videoId):
                     is_finished = True
                     continue
                 comment_count += len(comments)
-                insert_comments(comments, videoId, thread.id_, thread.fork)
+                insert_comments(comments, video_id, thread.id_, thread.fork)
+                main_min_no = thread.comments[0].no
+                when_unix = int(datetime.fromisoformat(thread.comments[0].posted_at).timestamp())
+        mongo_connector.update_task_status(task_id, "comment", {"commentCount": comment_count})
+        time.sleep(1)
+    return comment_count
+
+
+def update_comments(task_id, watch_data, video_id):
+    mongo_connector.update_task_status(task_id, "comment")
+    when_unix = int(time.time())
+    main_latest_comment = mongo_connector.get_latest_comment(video_id, "main")
+    if main_latest_comment is not None:
+        main_max_no = main_latest_comment.get("no")
+    else:
+        main_max_no = 0
+    easy_latest_comment = mongo_connector.get_latest_comment(video_id, "easy")
+    if easy_latest_comment is not None:
+        easy_max_no = easy_latest_comment.get("no")
+    else:
+        easy_max_no = 0
+    main_min_no = 0
+    easy_min_no = 0
+    is_finished = False
+    comment_count = 0
+    failed_count = 0
+    thread_key = None
+    while not is_finished:
+        comment_res = None
+        try:
+            comment_res = niconico_client.video.watch.get_comments(watch_data, when=when_unix, thread_key=thread_key)
+        except CommentAPIError as e:
+            if e.message == "EXPIRED_TOKEN":
+                thread_key = niconico_client.video.watch.get_thread_key(video_id)
+                time.sleep(1)
+                continue
+        if comment_res is None:
+            if failed_count >= 5:
+                raise ValueError("Failed to get comments")
+            failed_count += 1
+            time.sleep(60)
+            continue
+        for thread in comment_res.threads:
+            if thread.fork == "owner":
+                continue
+            elif thread.fork == "easy":
+                if easy_min_no == 0:
+                    easy_min_no = thread.comments[-1].no + 1
+                comment_up_index = len(thread.comments) - 1
+                while comment_up_index >= 0:
+                    if thread.comments[comment_up_index].no < easy_min_no:
+                        break
+                    comment_up_index -= 1
+                comment_down_index = 0
+                while comment_down_index < len(thread.comments):
+                    if thread.comments[comment_down_index].no > easy_max_no:
+                        break
+                    comment_down_index += 1
+                comments = thread.comments[comment_down_index:comment_up_index+1]
+                if len(comments) <= 0:
+                    continue
+                comment_count += len(comments)
+                insert_comments(comments, video_id, thread.id_, thread.fork)
+                easy_min_no = thread.comments[0].no
+            else:
+                if main_min_no == 0:
+                    main_min_no = thread.comments[-1].no + 1
+                comment_up_index = len(thread.comments) - 1
+                while comment_up_index >= 0:
+                    if thread.comments[comment_up_index].no < main_min_no:
+                        break
+                    comment_up_index -= 1
+                comment_down_index = 0
+                while comment_down_index < len(thread.comments):
+                    if thread.comments[comment_down_index].no > main_max_no:
+                        break
+                    comment_down_index += 1
+                comments = thread.comments[comment_down_index:comment_up_index+1]
+                if len(comments) <= 0:
+                    is_finished = True
+                    continue
+                comment_count += len(comments)
+                insert_comments(comments, video_id, thread.id_, thread.fork)
                 main_min_no = thread.comments[0].no
                 when_unix = int(datetime.fromisoformat(thread.comments[0].posted_at).timestamp())
         mongo_connector.update_task_status(task_id, "comment", {"commentCount": comment_count})
@@ -185,9 +307,11 @@ def getting_comments(task_id, watchData, videoId):
 def finish(task_id):
     mongo_connector.update_task_status(task_id, "completed")
 
+
 def error(task_id, e):
     mongo_connector.update_task_status(task_id, "failed", {"error": str(e)})
     mongo_connector.delete_video(task_id)
+
 
 def main():
     print("nicoarch worker started")
@@ -198,17 +322,29 @@ def main():
             continue
         task_id = task.decode("utf-8")
         try:
-            print(f"Fetching task {task_id}")
-            watchData, watchUUID, videoId = fetch(task_id)
-            print(f"Downloading task {task_id}")
-            download(task_id, watchData, watchUUID, videoId)
-            print(f"Getting Comments task {task_id}")
-            getting_comments(task_id, watchData, videoId)
+            print(f"Starting task {task_id}")
+            task = mongo_connector.get_task(task_id)
+            task_type = task.get("type")
+            video_id = task.get("videoId")
+            watch_id = task.get("watchId")
+            if task_type == "new":
+                print(f"Saving video data task {task_id}")
+                watch_data, watch_uuid = save_video_data(task_id, watch_id)
+                print(f"Downloading video task {task_id}")
+                download_video(task_id, watch_data, watch_uuid, video_id)
+                print(f"Getting Comments task {task_id}")
+                get_comments(task_id, watch_data, video_id)
+            else:
+                print(f"Updating video data task {task_id}")
+                watch_data = update_video_data(task_id, watch_id)
+                print(f"Updating comments task {task_id}")
+                update_comments(task_id, watch_data, video_id)
             print(f"Finishing task {task_id}")
             finish(task_id)
         except Exception as e:
             print(f"Error task {task_id}", e)
             error(task_id, e)
+
 
 if __name__ == "__main__":
     main()

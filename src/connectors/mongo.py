@@ -17,14 +17,34 @@ class MongoConnector:
         self.users = self.db.get_collection("users")
         self.comments = self.db.get_collection("comments")
 
-    def update_task_status(self, task_id: str, status: str, additional: dict = {}) -> dict:
-        task = self.tasks.find_one_and_update({
+    def get_task(self, task_id: str):
+        return self.tasks.find_one({
+            "_id": ObjectId(task_id)
+        })
+
+    def get_latest_comment(self, video_id: str, fork: str):
+        return self.comments.find_one({
+            "videoId": video_id,
+            "fork": fork
+        }, sort=[("no", -1)])
+
+    def update_task_status(self, task_id: str, status: str, additional: dict = {}):
+        return self.tasks.update_one({
             "_id": ObjectId(task_id)
         }, {"$set": {
             "status": status,
             **additional
         }})
-        return task
+
+    def update_user(self, user_id: int, data: dict):
+        return self.users.update_one({
+            "userId": user_id
+        }, {"$set": data})
+
+    def update_video(self, watch_id: str, data: dict):
+        return self.videos.update_one({
+            "watchId": watch_id
+        }, {"$set": data})
 
     def insert_user(self, user: dict):
         return self.users.insert_one(user)
