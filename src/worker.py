@@ -311,9 +311,10 @@ def finish(task_id):
     mongo_connector.update_task_status(task_id, "completed")
 
 
-def error(task_id, e):
+def error(task_id, e, task_type = None):
     mongo_connector.update_task_status(task_id, "failed", {"error": str(e)})
-    mongo_connector.delete_video(task_id)
+    if task_type != "update":
+        mongo_connector.delete_video(task_id)
 
 
 def main():
@@ -346,7 +347,7 @@ def main():
             finish(task_id)
         except Exception as e:
             print(f"Error task {task_id}", e)
-            error(task_id, e)
+            error(task_id, e, task_type)
 
 
 if __name__ == "__main__":
