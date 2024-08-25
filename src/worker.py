@@ -70,7 +70,7 @@ def save_video_data(task_id, watch_id):
             b = requests.get(user_data.icons.large)
             f.write(b.content)
         owner_id = user_res.inserted_id
-    mongo_connector.insert_video({
+    inseted_video = mongo_connector.insert_video({
         "title": watch_data.video.title,
         "watchId": watch_id,
         "registeredAt": watch_data.video.registered_at,
@@ -87,7 +87,7 @@ def save_video_data(task_id, watch_id):
         "taskId": ObjectId(task_id),
         "contentId": str(watch_uuid)
     })
-    return watch_data, watch_uuid
+    return watch_data, watch_uuid, inseted_video.inserted_id
 
 
 def update_video_data(task_id, watch_id):
@@ -107,7 +107,7 @@ def update_video_data(task_id, watch_id):
         with open(f'/contents/image/icon/{str(user_uuid)}.jpg', 'wb') as f:
             b = requests.get(user_data.icons.large)
             f.write(b.content)
-    mongo_connector.update_video(watch_id, {
+    updated_video = mongo_connector.update_video(watch_id, {
         "title": watch_data.video.title,
         "registeredAt": watch_data.video.registered_at,
         "count": {
@@ -121,7 +121,7 @@ def update_video_data(task_id, watch_id):
         "shortDescription": video_data.short_description,
         "taskId": ObjectId(task_id)
     })
-    return watch_data
+    return watch_data, updated_video.upserted_id
 
 
 def download_video(task_id, watch_data, watch_uuid, video_id):
@@ -171,7 +171,7 @@ def get_comments(task_id, watch_data, video_id):
             comment_res = niconico_client.video.watch.get_comments(watch_data, when=when_unix, thread_key=thread_key)
         except CommentAPIError as e:
             if e.message == "EXPIRED_TOKEN":
-                thread_key = niconico_client.video.watch.get_thread_key(video_id)
+                thread_key = niconico_client.video.watch.get_thread_key(watch_data.video.id_)
                 time.sleep(1)
                 continue
         if comment_res is None:
@@ -248,7 +248,7 @@ def update_comments(task_id, watch_data, video_id):
             comment_res = niconico_client.video.watch.get_comments(watch_data, when=when_unix, thread_key=thread_key)
         except CommentAPIError as e:
             if e.message == "EXPIRED_TOKEN":
-                thread_key = niconico_client.video.watch.get_thread_key(video_id)
+                thread_key = niconico_client.video.watch.get_thread_key(watch_data.video.id_)
                 time.sleep(1)
                 continue
         if comment_res is None:
@@ -329,18 +329,17 @@ def main():
             print(f"Starting task {task_id}")
             task = mongo_connector.get_task(task_id)
             task_type = task.get("type")
-            video_id = task.get("videoId")
             watch_id = task.get("watchId")
             if task_type == "new":
                 print(f"Saving video data task {task_id}")
-                watch_data, watch_uuid = save_video_data(task_id, watch_id)
+                watch_data, watch_uuid, video_id = save_video_data(task_id, watch_id)
                 print(f"Downloading video task {task_id}")
                 download_video(task_id, watch_data, watch_uuid, video_id)
                 print(f"Getting Comments task {task_id}")
                 get_comments(task_id, watch_data, video_id)
             else:
                 print(f"Updating video data task {task_id}")
-                watch_data = update_video_data(task_id, watch_id)
+                watch_data, video_id = update_video_data(task_id, watch_id)
                 print(f"Updating comments task {task_id}")
                 update_comments(task_id, watch_data, video_id)
             print(f"Finishing task {task_id}")

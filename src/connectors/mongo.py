@@ -28,8 +28,8 @@ class MongoConnector:
             "fork": fork
         }, sort=[("no", -1)])
 
-    def update_task_status(self, task_id: str, status: str, additional: dict = {}):
-        return self.tasks.update_one({
+    def update_task_status(self, task_id: str, status: str, additional: dict = {}) -> dict:
+        return self.tasks.find_one_and_update({
             "_id": ObjectId(task_id)
         }, {"$set": {
             "status": status,
