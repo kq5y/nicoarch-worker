@@ -241,6 +241,7 @@ def update_comments(task_id, watch_data, video_id):
     comment_count = 0
     failed_count = 0
     thread_key = None
+    print("main_max_no={}, easy_max_no={}".format(main_max_no, easy_max_no))
     while not is_finished:
         comment_res = None
         try:
@@ -291,6 +292,8 @@ def update_comments(task_id, watch_data, video_id):
                     if thread.comments[comment_down_index].no > main_max_no:
                         break
                     comment_down_index += 1
+                print("comment_down_index={}, comment_up_index={}".format(comment_down_index, comment_up_index))
+                print("down_no={}, up_no={}".format(thread.comments[comment_down_index].no, thread.comments[comment_up_index].no))
                 comments = thread.comments[comment_down_index:comment_up_index+1]
                 if len(comments) <= 0:
                     is_finished = True
