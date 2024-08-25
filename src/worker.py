@@ -269,7 +269,7 @@ def update_comments(task_id, watch_data, video_id):
                         break
                     comment_up_index -= 1
                 comment_down_index = 0
-                while comment_down_index < len(thread.comments):
+                while comment_down_index < len(thread.comments) - 1:
                     if thread.comments[comment_down_index].no > easy_max_no:
                         break
                     comment_down_index += 1
@@ -288,7 +288,7 @@ def update_comments(task_id, watch_data, video_id):
                         break
                     comment_up_index -= 1
                 comment_down_index = 0
-                while comment_down_index < len(thread.comments):
+                while comment_down_index < len(thread.comments) - 1:
                     if thread.comments[comment_down_index].no > main_max_no:
                         break
                     comment_down_index += 1
