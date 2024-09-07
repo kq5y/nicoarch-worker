@@ -75,7 +75,7 @@ redis_connector = RedisConnector(REDIS_URL)
 
 def save_video_data(task_id, watch_id, session):
     mongo_connector.update_task_status(task_id, "fetching")
-    watch_uuid = uuid.uuid4(uuid.NAMESPACE_URL, watch_id)
+    watch_uuid = uuid.uuid4()
     video_data = niconico_client.video.get_video(watch_id)
     if video_data is None:
         raise ValueError("Video not found")
@@ -83,7 +83,7 @@ def save_video_data(task_id, watch_id, session):
     user_data = niconico_client.user.get_user(str(watch_data.owner.id_))
     owner_id = None
     if user_data is not None:
-        user_uuid = uuid.uuid4(uuid.NAMESPACE_URL, str(user_data.id_))
+        user_uuid = uuid.uuid4()
         user_res = mongo_connector.insert_user({
             "userId": user_data.id_,
             "nickname": user_data.nickname,
@@ -123,7 +123,7 @@ def update_video_data(task_id, watch_id, session):
     watch_data = niconico_client.video.watch.get_watch_data(watch_id)
     user_data = niconico_client.user.get_user(str(watch_data.owner.id_))
     if user_data is not None:
-        user_uuid = uuid.uuid4(uuid.NAMESPACE_URL, str(user_data.id_))
+        user_uuid = uuid.uuid4()
         mongo_connector.update_user(user_data.id_, {
             "nickname": user_data.nickname,
             "description": user_data.description,
@@ -150,7 +150,7 @@ def update_video_data(task_id, watch_id, session):
 
 
 def download_video(task_id, watch_data, watch_uuid, video_id):
-    mongo_connector.update_task_status(task_id, "downloading", {"videoId": video_id})
+    mongo_connector.update_task_status(task_id, "downloading", additional={"videoId": video_id})
     with open(f'/contents/image/thumbnail/{str(watch_uuid)}.jpg', 'wb') as f:
         b = requests.get(watch_data.video.thumbnail.ogp)
         f.write(b.content)
@@ -244,7 +244,7 @@ def get_comments(task_id, watch_data, video_id):
                 insert_comments(comments, video_id, thread.id_, thread.fork)
                 main_min_no = thread.comments[0].no
                 when_unix = int(datetime.fromisoformat(thread.comments[0].posted_at).timestamp())
-        mongo_connector.update_task_status(task_id, "comment", {"commentCount": comment_count})
+        mongo_connector.update_task_status(task_id, "comment", additional={"commentCount": comment_count})
         time.sleep(1)
     return comment_count
 
@@ -319,17 +319,17 @@ def update_comments(task_id, watch_data, video_id):
                 insert_comments(comments, video_id, thread.id_, thread.fork)
                 main_min_no = comments[0].no
                 when_unix = int(datetime.fromisoformat(comments[0].posted_at).timestamp())
-        mongo_connector.update_task_status(task_id, "comment", {"commentCount": comment_count})
+        mongo_connector.update_task_status(task_id, "comment", additional={"commentCount": comment_count})
         time.sleep(1)
     return comment_count
 
 
-def finish(task_id, session):
-    mongo_connector.update_task_status(task_id, "completed", session=session)
+def finish(task_id):
+    mongo_connector.update_task_status(task_id, "completed")
 
 
-def error(task_id, e, task_type = None):
-    mongo_connector.update_task_status(task_id, "failed", {"error": str(e)})
+def error(task_id, e):
+    mongo_connector.update_task_status(task_id, "failed", additional={"error": str(e)})
 
 
 def main():
@@ -357,7 +357,7 @@ def main():
                         watch_data, video_id = update_video_data(task_id, watch_id, session)
         except Exception as e:
             print(f"Error task {task_id}", e)
-            error(task_id, e, task_type)
+            error(task_id, e)
             continue
         try:
             task_start_time = datetime.now()
@@ -371,7 +371,7 @@ def main():
             finish(task_id)
         except Exception as e:
             print(f"Error task {task_id}", e)
-            error(task_id, e, task_type)
+            error(task_id, e)
             try:
                 mongo_connector.delete_comments(video_id, task_start_time)
             except Exception as e:
