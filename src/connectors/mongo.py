@@ -1,4 +1,5 @@
 from bson import ObjectId
+from datetime import datetime
 
 from pymongo import MongoClient
 from pymongo.database import Database
@@ -34,24 +35,39 @@ class MongoConnector:
             "_id": ObjectId(task_id)
         }, {"$set": {
             "status": status,
+            "updatedAt": datetime.now(),
             **additional
         }}, session=session)
 
     def update_user(self, user_id: int, data: dict, *, session: ClientSession | None = None):
         return self.users.update_one({
             "userId": user_id
-        }, {"$set": data}, session=session)
+        }, {"$set": {
+            **data,
+            "updatedAt": datetime.now()
+        }}, session=session)
 
     def update_video(self, watch_id: str, data: dict, *, session: ClientSession | None = None):
         return self.videos.update_one({
             "watchId": watch_id
-        }, {"$set": data}, session=session)
+        }, {"$set": {
+            **data,
+            "updatedAt": datetime.now()
+        }}, session=session)
 
     def insert_user(self, user: dict, *, session: ClientSession | None = None):
-        return self.users.insert_one(user, session=session)
+        return self.users.insert_one({
+            **user,
+            "createdAt": datetime.now(),
+            "updatedAt": datetime.now()
+        }, session=session)
 
     def insert_video(self, video: dict, *, session: ClientSession | None = None):
-        return self.videos.insert_one(video, session=session)
+        return self.videos.insert_one({
+            **video,
+            "createdAt": datetime.now(),
+            "updatedAt": datetime.now()
+        }, session=session)
 
     def insert_comments(self, comments: list[dict], *, session: ClientSession | None = None):
         return self.comments.insert_many(comments, session=session)

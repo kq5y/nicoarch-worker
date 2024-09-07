@@ -152,6 +152,8 @@ def insert_comments(comments, video_id, thread_id, thread_fork):
         "videoId": video_id,
         "threadId": thread_id,
         "fork": thread_fork,
+        "createdAt": datetime.now(),
+        "updatedAt": datetime.now()
     } for comment in comments])
 
 
