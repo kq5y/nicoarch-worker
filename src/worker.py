@@ -356,6 +356,7 @@ def main():
                 if video_data is None:
                     raise ValueError("Video not found")
                 watch_data, video_id = update_video_data(task_id, watch_id)
+            print(f"Video id: {video_id}")
         except Exception as e:
             print(f"Error task {task_id}", e)
             error(task_id, e)
