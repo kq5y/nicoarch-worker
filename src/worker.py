@@ -145,8 +145,8 @@ def update_video_data(task_id, watch_id):
         "description": watch_data.video.description,
         "shortDescription": video_data.short_description,
         "taskId": ObjectId(task_id)
-    })
-    return watch_data, updated_video.upserted_id
+    }, upsert=True)
+    return watch_data, updated_video.get("_id")
 
 
 def download_video(task_id, watch_data, watch_uuid, video_id):
@@ -364,7 +364,7 @@ def main():
                 mongo_connector.delete_video(watch_id)
             else:
                 if video_data is not None:
-                    mongo_connector.update_video(watch_id, video_data)
+                    mongo_connector.replace_video(watch_id, video_data)
             continue
         try:
             task_start_time = datetime.now()

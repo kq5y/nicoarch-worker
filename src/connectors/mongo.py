@@ -51,8 +51,8 @@ class MongoConnector:
             **data
         }})
 
-    def update_video(self, watch_id: str, data: dict):
-        return self.videos.update_one({
+    def update_video(self, watch_id: str, data: dict) -> dict:
+        return self.videos.find_one_and_update({
             "watchId": watch_id
         }, {"$set": {
             "updatedAt": datetime.now(),
@@ -72,6 +72,11 @@ class MongoConnector:
             "createdAt": datetime.now(),
             "updatedAt": datetime.now()
         })
+
+    def replace_video(self, watch_id: str, video: dict):
+        return self.videos.replace_one({
+            "watchId": watch_id
+        }, video)
 
     def delete_video(self, watch_id: str):
         return self.videos.delete_one({
