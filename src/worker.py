@@ -145,7 +145,7 @@ def update_video_data(task_id, watch_id):
         "description": watch_data.video.description,
         "shortDescription": video_data.short_description,
         "taskId": ObjectId(task_id)
-    }, upsert=True)
+    })
     return watch_data, updated_video.get("_id")
 
 
