@@ -307,7 +307,7 @@ def update_comments(task_id, watch_data, video_id):
                     main_min_no = thread.comments[-1].no + 1
                 comments = []
                 for comment in thread.comments:
-                    if comments.no >= main_min_no:
+                    if comment.no >= main_min_no:
                         break
                     if comment.no <= main_max_no:
                         continue
