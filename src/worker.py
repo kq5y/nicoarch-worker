@@ -1,5 +1,6 @@
 import os
 import uuid
+import json
 import time
 from datetime import datetime
 
@@ -7,7 +8,7 @@ import requests
 from bson import ObjectId
 
 from niconico import NicoNico
-from niconico.exceptions import CommentAPIError
+from niconico.exceptions import CommentAPIError, LoginFailureError
 
 from connectors.mongo import MongoConnector
 from connectors.redis import RedisConnector
@@ -40,9 +41,33 @@ if os.path.exists("/contents/image/thumbnail") is False:
 if os.path.exists("/contents/video") is False:
     os.makedirs("/contents/video")
 
+if os.path.exists("/app/session") is False:
+    os.makedirs("/app/session")
+
 
 niconico_client = NicoNico()
-niconico_client.login_with_mail(NICONICO_MAIL, NICONICO_PASSWORD)
+
+def login_with_mail():
+    niconico_client.login_with_mail(NICONICO_MAIL, NICONICO_PASSWORD)
+    with open("/app/session/nico.json", "w") as f:
+        f.write(json.dumps({
+            "user_session": niconico_client.session.cookies.get("user_session"),
+        }))
+
+if os.path.exists("/app/session/nico.json") is False:
+    login_with_mail()
+else:
+    with open("/app/session/nico.json", "r") as f:
+        session_data = json.load(f)
+        user_session = session_data.get("user_session")
+        if user_session is None:
+            login_with_mail()
+        else:
+            try:
+                niconico_client.login_with_session(user_session)
+            except LoginFailureError:
+                login_with_mail()
+
 
 mongo_connector = MongoConnector(MONGO_URL)
 redis_connector = RedisConnector(REDIS_URL)
