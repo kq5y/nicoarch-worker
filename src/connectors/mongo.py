@@ -3,7 +3,6 @@ from datetime import datetime
 
 from pymongo import MongoClient
 from pymongo.database import Database
-from pymongo.client_session import ClientSession
 
 
 class MongoConnector:
@@ -24,62 +23,69 @@ class MongoConnector:
             "_id": ObjectId(task_id)
         })
 
+    def get_video(self, watch_id: str):
+        return self.videos.find_one({
+            "watchId": watch_id
+        })
+
     def get_latest_comment(self, video_id, fork: str):
         return self.comments.find_one({
             "videoId": video_id,
             "fork": fork
         }, sort=[("no", -1)])
 
-    def update_task_status(self, task_id: str, status: str, *, additional: dict = {}, session: ClientSession | None = None) -> dict:
+    def update_task_status(self, task_id: str, status: str, *, additional: dict = {}) -> dict:
         return self.tasks.find_one_and_update({
             "_id": ObjectId(task_id)
         }, {"$set": {
             "status": status,
             "updatedAt": datetime.now(),
             **additional
-        }}, session=session)
+        }})
 
-    def update_user(self, user_id: int, data: dict, *, session: ClientSession | None = None):
+    def update_user(self, user_id: int, data: dict):
         return self.users.update_one({
             "userId": user_id
         }, {"$set": {
-            **data,
-            "updatedAt": datetime.now()
-        }}, session=session)
+            "updatedAt": datetime.now(),
+            **data
+        }})
 
-    def update_video(self, watch_id: str, data: dict, *, session: ClientSession | None = None):
+    def update_video(self, watch_id: str, data: dict):
         return self.videos.update_one({
             "watchId": watch_id
         }, {"$set": {
-            **data,
-            "updatedAt": datetime.now()
-        }}, session=session)
+            "updatedAt": datetime.now(),
+            **data
+        }})
 
-    def insert_user(self, user: dict, *, session: ClientSession | None = None):
+    def insert_user(self, user: dict):
         return self.users.insert_one({
             **user,
             "createdAt": datetime.now(),
             "updatedAt": datetime.now()
-        }, session=session)
+        })
 
-    def insert_video(self, video: dict, *, session: ClientSession | None = None):
+    def insert_video(self, video: dict):
         return self.videos.insert_one({
             **video,
             "createdAt": datetime.now(),
             "updatedAt": datetime.now()
-        }, session=session)
+        })
 
-    def insert_comments(self, comments: list[dict], *, session: ClientSession | None = None):
-        return self.comments.insert_many(comments, session=session)
+    def delete_video(self, watch_id: str):
+        return self.videos.delete_one({
+            "watchId": watch_id
+        })
 
-    def delete_comments(self, video_id, start_time, *, session: ClientSession | None = None):
+    def insert_comments(self, comments: list[dict]):
+        return self.comments.insert_many(comments)
+
+    def delete_comments(self, video_id, start_time):
         return self.comments.delete_many({
             "videoId": video_id,
             "createdAt": {"$gte": start_time}
-        }, session=session)
-
-    def start_session(self) -> ClientSession:
-        return self.client.start_session()
+        })
 
     def close(self):
         self.client.close()
