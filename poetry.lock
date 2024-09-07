@@ -154,13 +154,13 @@ files = [
 
 [[package]]
 name = "niconico-py"
-version = "2.0.8"
+version = "2.0.9"
 description = "API wrapper for NicoNico services"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "niconico_py-2.0.8-py3-none-any.whl", hash = "sha256:32dfe2655a2616850d7692145f0a45739b41093ca4c05b2de2f33625ce3c5cf3"},
-    {file = "niconico_py-2.0.8.tar.gz", hash = "sha256:018c8035e4d0b14ee9888a811d59a4a095a857c9363ef9bb0efa1b1090f3ff29"},
+    {file = "niconico_py-2.0.9-py3-none-any.whl", hash = "sha256:701b9d6f91714c9933ab9740f4fb9dd6190cf3ef2cce902c63062fd4c07fbd5c"},
+    {file = "niconico_py-2.0.9.tar.gz", hash = "sha256:214f17dbd223762924881352dd27891a20e1a1c3a501c892b3bea6a885d451ca"},
 ]
 
 [package.dependencies]
@@ -443,4 +443,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "7f4f99052d238707e32ea5436e91c50c7bc8e14cdfec4bf794f838c40149c706"
+content-hash = "dd603f7ad3d54e19300bba93feae94de764f1fe0663bdfcd2a03042dbf5cd1e6"

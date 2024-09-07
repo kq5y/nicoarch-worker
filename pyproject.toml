@@ -12,7 +12,7 @@ python = "^3.12"
 redis = "^5.0.8"
 pymongo = "^4.8.0"
 requests = "^2.32.3"
-niconico-py = "^2.0.8"
+niconico-py = "^2.0.9"
 
 
 [tool.poetry.group.dev.dependencies]

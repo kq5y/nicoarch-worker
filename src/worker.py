@@ -51,7 +51,7 @@ def login_with_mail():
     niconico_client.login_with_mail(NICONICO_MAIL, NICONICO_PASSWORD)
     with open("/app/session/nico.json", "w") as f:
         f.write(json.dumps({
-            "user_session": niconico_client.session.cookies.get("user_session"),
+            "user_session": niconico_client.get_user_session(),
         }))
 
 if os.path.exists("/app/session/nico.json") is False:
