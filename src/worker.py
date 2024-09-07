@@ -48,7 +48,7 @@ mongo_connector = MongoConnector(MONGO_URL)
 redis_connector = RedisConnector(REDIS_URL)
 
 
-def save_video_data(task_id, watch_id):
+def save_video_data(task_id, watch_id, session):
     mongo_connector.update_task_status(task_id, "fetching")
     watch_uuid = uuid.uuid4(uuid.NAMESPACE_URL, watch_id)
     video_data = niconico_client.video.get_video(watch_id)
@@ -65,7 +65,7 @@ def save_video_data(task_id, watch_id):
             "description": user_data.description,
             "registeredVersion": user_data.registered_version,
             "contentId": str(user_uuid)
-        })
+        }, session=session)
         with open(f'/contents/image/icon/{str(user_uuid)}.jpg', 'wb') as f:
             b = requests.get(user_data.icons.large)
             f.write(b.content)
@@ -86,11 +86,11 @@ def save_video_data(task_id, watch_id):
         "shortDescription": video_data.short_description,
         "taskId": ObjectId(task_id),
         "contentId": str(watch_uuid)
-    })
+    }, session=session)
     return watch_data, watch_uuid, inseted_video.inserted_id
 
 
-def update_video_data(task_id, watch_id):
+def update_video_data(task_id, watch_id, session):
     mongo_connector.update_task_status(task_id, "fetching")
     video_data = niconico_client.video.get_video(watch_id)
     if video_data is None:
@@ -103,7 +103,7 @@ def update_video_data(task_id, watch_id):
             "nickname": user_data.nickname,
             "description": user_data.description,
             "registeredVersion": user_data.registered_version
-        })
+        }, session=session)
         with open(f'/contents/image/icon/{str(user_uuid)}.jpg', 'wb') as f:
             b = requests.get(user_data.icons.large)
             f.write(b.content)
@@ -120,7 +120,7 @@ def update_video_data(task_id, watch_id):
         "description": watch_data.video.description,
         "shortDescription": video_data.short_description,
         "taskId": ObjectId(task_id)
-    })
+    }, session=session)
     return watch_data, updated_video.upserted_id
 
 
@@ -263,58 +263,46 @@ def update_comments(task_id, watch_data, video_id):
             elif thread.fork == "easy":
                 if easy_min_no == 0:
                     easy_min_no = thread.comments[-1].no + 1
-                comment_up_index = len(thread.comments) - 1
-                while comment_up_index >= 0:
-                    if thread.comments[comment_up_index].no < easy_min_no:
+                comments = []
+                for comment in thread.comments:
+                    if comment.no >= easy_min_no:
                         break
-                    comment_up_index -= 1
-                comment_down_index = 0
-                while comment_down_index < len(thread.comments) - 1:
-                    if thread.comments[comment_down_index].no > easy_max_no:
-                        break
-                    comment_down_index += 1
-                comments = thread.comments[comment_down_index:comment_up_index+1]
+                    if comment.no <= easy_max_no:
+                        continue
+                    comments.append(comment)
                 if len(comments) <= 0:
                     continue
                 comment_count += len(comments)
                 insert_comments(comments, video_id, thread.id_, thread.fork)
-                easy_min_no = thread.comments[0].no
+                easy_min_no = comments[0].no
             else:
                 if main_min_no == 0:
                     main_min_no = thread.comments[-1].no + 1
-                comment_up_index = len(thread.comments) - 1
-                while comment_up_index >= 0:
-                    if thread.comments[comment_up_index].no < main_min_no:
+                comments = []
+                for comment in thread.comments:
+                    if comments.no >= main_min_no:
                         break
-                    comment_up_index -= 1
-                comment_down_index = 0
-                while comment_down_index < len(thread.comments) - 1:
-                    if thread.comments[comment_down_index].no > main_max_no:
-                        break
-                    comment_down_index += 1
-                print("comment_down_index={}, comment_up_index={}".format(comment_down_index, comment_up_index))
-                print("down_no={}, up_no={}".format(thread.comments[comment_down_index].no, thread.comments[comment_up_index].no))
-                comments = thread.comments[comment_down_index:comment_up_index+1]
+                    if comment.no <= main_max_no:
+                        continue
+                    comments.append(comment)
                 if len(comments) <= 0:
                     is_finished = True
                     continue
                 comment_count += len(comments)
                 insert_comments(comments, video_id, thread.id_, thread.fork)
-                main_min_no = thread.comments[0].no
-                when_unix = int(datetime.fromisoformat(thread.comments[0].posted_at).timestamp())
+                main_min_no = comments[0].no
+                when_unix = int(datetime.fromisoformat(comments[0].posted_at).timestamp())
         mongo_connector.update_task_status(task_id, "comment", {"commentCount": comment_count})
         time.sleep(1)
     return comment_count
 
 
-def finish(task_id):
-    mongo_connector.update_task_status(task_id, "completed")
+def finish(task_id, session):
+    mongo_connector.update_task_status(task_id, "completed", session=session)
 
 
 def error(task_id, e, task_type = None):
     mongo_connector.update_task_status(task_id, "failed", {"error": str(e)})
-    if task_type != "update":
-        mongo_connector.delete_video(task_id)
 
 
 def main():
@@ -330,16 +318,26 @@ def main():
             task = mongo_connector.get_task(task_id)
             task_type = task.get("type")
             watch_id = task.get("watchId")
+            with mongo_connector.start_session() as session:
+                with session.start_transaction():
+                    if task_type == "new":
+                        print(f"Saving video data task {task_id}")
+                        watch_data, watch_uuid, video_id = save_video_data(task_id, watch_id, session)
+                        print(f"Downloading video task {task_id}")
+                        download_video(task_id, watch_data, watch_uuid, video_id)
+                    else:
+                        print(f"Updating video data task {task_id}")
+                        watch_data, video_id = update_video_data(task_id, watch_id, session)
+        except Exception as e:
+            print(f"Error task {task_id}", e)
+            error(task_id, e, task_type)
+            continue
+        try:
+            task_start_time = datetime.now()
             if task_type == "new":
-                print(f"Saving video data task {task_id}")
-                watch_data, watch_uuid, video_id = save_video_data(task_id, watch_id)
-                print(f"Downloading video task {task_id}")
-                download_video(task_id, watch_data, watch_uuid, video_id)
                 print(f"Getting Comments task {task_id}")
                 get_comments(task_id, watch_data, video_id)
             else:
-                print(f"Updating video data task {task_id}")
-                watch_data, video_id = update_video_data(task_id, watch_id)
                 print(f"Updating comments task {task_id}")
                 update_comments(task_id, watch_data, video_id)
             print(f"Finishing task {task_id}")
@@ -347,6 +345,10 @@ def main():
         except Exception as e:
             print(f"Error task {task_id}", e)
             error(task_id, e, task_type)
+            try:
+                mongo_connector.delete_comments(video_id, task_start_time)
+            except Exception as e:
+                pass
 
 
 if __name__ == "__main__":
