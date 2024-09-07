@@ -30,13 +30,13 @@ class MongoConnector:
 
     def get_latest_comment(self, video_id, fork: str):
         return self.comments.find_one({
-            "videoId": video_id,
+            "videoId": ObjectId(str(video_id)),
             "fork": fork
         }, sort=[("no", -1)])
 
     def update_task_status(self, task_id: str, status: str, *, additional: dict = {}) -> dict:
         return self.tasks.find_one_and_update({
-            "_id": ObjectId(task_id)
+            "_id": ObjectId(str(task_id))
         }, {"$set": {
             "status": status,
             "updatedAt": datetime.now(),
@@ -83,7 +83,7 @@ class MongoConnector:
 
     def delete_comments(self, video_id, start_time):
         return self.comments.delete_many({
-            "videoId": video_id,
+            "videoId": ObjectId(str(video_id)),
             "createdAt": {"$gte": start_time}
         })
 
