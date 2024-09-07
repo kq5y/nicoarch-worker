@@ -50,7 +50,7 @@ redis_connector = RedisConnector(REDIS_URL)
 
 def save_video_data(task_id, watch_id):
     mongo_connector.update_task_status(task_id, "fetching")
-    watch_uuid = uuid.uuid3(uuid.NAMESPACE_URL, watch_id)
+    watch_uuid = uuid.uuid4(uuid.NAMESPACE_URL, watch_id)
     video_data = niconico_client.video.get_video(watch_id)
     if video_data is None:
         raise ValueError("Video not found")
@@ -58,7 +58,7 @@ def save_video_data(task_id, watch_id):
     user_data = niconico_client.user.get_user(str(watch_data.owner.id_))
     owner_id = None
     if user_data is not None:
-        user_uuid = uuid.uuid3(uuid.NAMESPACE_URL, str(user_data.id_))
+        user_uuid = uuid.uuid4(uuid.NAMESPACE_URL, str(user_data.id_))
         user_res = mongo_connector.insert_user({
             "userId": user_data.id_,
             "nickname": user_data.nickname,
@@ -98,7 +98,7 @@ def update_video_data(task_id, watch_id):
     watch_data = niconico_client.video.watch.get_watch_data(watch_id)
     user_data = niconico_client.user.get_user(str(watch_data.owner.id_))
     if user_data is not None:
-        user_uuid = uuid.uuid3(uuid.NAMESPACE_URL, str(user_data.id_))
+        user_uuid = uuid.uuid4(uuid.NAMESPACE_URL, str(user_data.id_))
         mongo_connector.update_user(user_data.id_, {
             "nickname": user_data.nickname,
             "description": user_data.description,
